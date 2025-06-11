@@ -274,6 +274,42 @@ Hidden nam sluzi da radimo backupe ili analitiku preko njega da ne bi optereciva
 3. Pravimo [skriptu](./images/mongodoskripta.png) za backup
 4. Sada bi se trebao backup praviti jednom dnevno u 02:00h
 
+### Vjezba7: UPGRADE MONGODB NA NOVIJU VERZIJU [link]( https://www.mongodb.com/docs/manual/release-notes/7.0-upgrade-replica-set/)
+
+1. Pogledamo status replica seta jel sve zdravo.
+2. Odradimo backup
+3. Upoznamo se s novim featursima u novoj verziji pogotovo s compatibilty changes.
+4. Svi u setu moraju imati featureCompabilityversion istu, a da to provjerimo ukucamo na svakom:
+
+        db.adminCommand( { getParameter: 1, featureCompatibilityVersion: 1 } )
+
+5. Svi nodovi moraju biti u zdravom stanju a da to provjerimo:
+
+        db.adminCommand( { replSetGetStatus: 1 } )
+6. Kad smo odradili pripreme mozemo poceti s nadogradnjom, prvo spustimo jedan sekundarni:
+
+        db.adminCommand( { shutdown: 1 } )
+
+7. Dodamo u yaml file novi image i pokrenemo novu instancu, trebala bi se automatski dodati u replica set.
+8. Ponovimo istu komandu za provjeru statusa i obavezno pregledati logove da se synca uredno
+9. Ovdje valja dodati da vidis da slucajno neki node nema drift ili kasnjenje u replikaciji:
+
+        db.printSecondaryReplicationInfo()
+
+10. Isto uradimo i s drugim nodom
+11. Kad dodjemo do primaryu njega moram stepDown da odstupi s te pozicije da bi i njega mogli spustiti kao secundary:
+
+        rs.stepDown(60)
+
+12. I njemu radimo isti korak upgradea
+
+13. Kad je sve gotovo spojimo se na primary gdje cemo potvrditi da smo sigurni da krecemo s novim featursima pomocu(u realnom vremenu pricekamo par dana da vidimo da necemo ici downgrade verzije posto poslije ovoga jedini je downgrade da zovemo direkt u mongo):
+
+        db.adminCommand( { setFeatureCompatibilityVersion: "7.0" } )
+
+
+
+
 ### Dodatni materijali
 
 Tinova [skripta](./images/function%20getRandomInt.txt) za unos vise podataka odjednom 
