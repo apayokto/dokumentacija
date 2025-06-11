@@ -1,0 +1,66 @@
+function getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function getRandomFloat(min, max, decimals) {
+    var factor = Math.pow(10, decimals || 2);
+    return Math.round((Math.random() * (max - min) + min) * factor) / factor;
+}
+
+function getRandomDate(startYear, endYear) {
+    var start = new Date(startYear || 1950, 0, 1).getTime();
+    var end = new Date(endYear || 2000, 11, 31).getTime();
+    return new Date(getRandomInt(start, end));
+}
+
+function getRandomString(length) {
+    var chars = 'abcdefghijklmnopqrstuvwxyz';
+    var str = '';
+    for (var i = 0; i < length; i++) {
+        str += chars.charAt(getRandomInt(0, chars.length - 1));
+    }
+    return str;
+}
+
+function getRandomEmail(name) {
+    var domains = ['example.com', 'test.org', 'mail.com', 'sample.net'];
+    return name.toLowerCase() + '@' + domains[getRandomInt(0, domains.length - 1)];
+}
+
+function getRandomTags() {
+    var tagPool = ['new', 'customer', 'vip', 'banned', 'beta', 'internal', 'review'];
+    var tagCount = getRandomInt(1, 4);
+    var tags = [];
+    for (var i = 0; i < tagCount; i++) {
+        tags.push(tagPool[getRandomInt(0, tagPool.length - 1)]);
+    }
+    return tags;
+}
+
+for (var i = 1; i <= 1000; i++) {
+    var name = "name" + i;
+    var birthday = getRandomDate(1950, 2000);
+    var age = new Date().getFullYear() - birthday.getFullYear();
+
+    db.nova2.insert({
+        name: name,
+        age: age,
+        birthday: birthday,
+        email: getRandomEmail(name),
+        address: {
+            street: getRandomInt(100, 9999) + ' ' + getRandomString(8) + ' St',
+            city: getRandomString(6),
+            zip: getRandomInt(10000, 99999),
+            country: getRandomString(7)
+        },
+        isActive: Math.random() < 0.5,
+        tags: getRandomTags(),
+        score: getRandomFloat(0, 100, 2),
+        createdAt: new Date(),
+        metadata: {
+            imported: Math.random() < 0.3,
+            source: ['api', 'form', 'manual'][getRandomInt(0, 2)]
+        }
+    });
+}
+

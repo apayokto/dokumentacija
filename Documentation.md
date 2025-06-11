@@ -97,7 +97,7 @@ Offical [self managed path](https://learn.mongodb.com/learn/learning-path/mongod
 Unoffical [path](https://www.youtube.com/watch?v=cLsawKBUdTE&list=PLSmSa8KVdfSu-XFvjdWoN7z9WRoLly4my)
 
 
-### Vjezba: REPLICA SET S 3 MONGODB NODA 
+### Vjezba0: REPLICA SET S 3 MONGODB NODA 
 
 1. Prvo pisemo [docker-compose.yaml](./images/mongo.png) file
 2. Pravimo foldere za conf fileove koje cemo mountati kroz yaml i dodajemo u njih sta nam treba  -->  [mongo1.cnf](./images/mongoconf.png) mongo2.cnf mongo3.cnf (2 i 3 su isto kao 1)
@@ -142,3 +142,138 @@ Unoffical [path](https://www.youtube.com/watch?v=cLsawKBUdTE&list=PLSmSa8KVdfSu-
         rs.stepDown(60)  // automatski mu je 60 sekundi ali stavimo svakako
 
 13. Sada ce replica izabrati node s _id 2 da bude primarni posto smo njemu dali veci prioritet.
+
+### Vjezba1: Dodavanje hidden noda u replika set
+
+Hidden nam sluzi da radimo backupe ili analitiku preko njega da ne bi opterecivali ostale nodove.
+1. Prvo ga dodamo u [docker-compose.yaml](./images/mongohidden.png)
+2. Napravimo i za njega [mongoh.conf](./images/mongoconf.png) koji cemo mountati kroz yaml
+3. Napravimo foldere za datu i log fileove koje cemo mountati u yamlu s permisijama --> mongohidden_data  loghidden \\ dati permisije i vlasnistva
+4. I njemu moramo mountati key file(procedura opisana u prijasnjoj vjezbi) 
+5. Dignemo ga pomocu docker-composea
+6. Spojimo se na primary instancu i pridruzimo ga replica setu
+
+        rs.add({
+        host: "mongohidden:27017",  // njegova adresa
+        hidden: true,               // da je skriven
+        priority: 0,                // da ne moze biti izabran za primarnog
+        votes: 0,                   // da ne moze glasati
+        secondaryDelaySecs: 3600    // da pise podatke s zaostatkom od 1h, ako se slucajno pobrise nesto s primarnog da mozemo brze vratiti podatke 
+        })
+
+7. Provjeriti status, njemu bi trebalo pisati hidden: true
+
+### Vjezba2: DODAVANJE ARBITER NODA U REPLICA SET [link](https://www.mongodb.com/docs/manual/tutorial/add-replica-set-arbiter/)
+
+ Arbiter nam sluzi u slucaju parnog broja nodova da bude dodatni glas kojim se moze izabrati primarni (najcesci slucaj je 2 noda + arbiter)
+
+1. Prvo ga dodamo u [docker-compose.yaml](./images/mongoarbiter.png) file
+2. Njemu ne treba folder za datu, mozemo napraviti samo za logove --> logarbiter // i dati mu permisije i vlasnistva
+3. Napraviti i [mongoarb.conf](./images/mongoarbiterconf.png) file za njega, mozemo komentirati sve vezano za podatke a ostaviti postavke za replikaciju, i mountati ga u yamlu
+4. I njemu se mora mountati key file 
+5. Dizemo ga pomocu docker-composea
+6. Pridruzimo ga replica setu s primarnog noda
+
+        rs.addArb({"mongoarb:27017"})  //on vec u komandi addArb
+7. Sada mozemo provjeriti stanje:
+
+        rs.status()
+
+### Vjezba3: BACKUP S MONGODUMP [link](https://www.mongodb.com/docs/database-tools/mongodump/)
+
+1. Pravimo novi kontenjer 'mongobackup' s istom slikom kao i nodovi na kojima ce raditi backup --> [docker-compose.yaml](./images/mongoabackup.png) // nisam nasao sliku s mongo tools samo za alate, lakse mi je bilo staviti sliku cijelog monga
+2. Mountamo novi folder gdje cemo cuvati backupe --> backups 
+3. U enviromentu dadnemo novog usera za pravljenje backupa
+4. Dignemo novi kontenjer pomocu docker-compose i spojimo se na njega
+5. Moramo napraviti usera i na replici setu da se moze raditi backup, tako da se spojimo na primarnu instancu i kreiramo ga:
+
+        db.createUser(
+        {
+        user: "BackupUser",  // bio sam lijen da stavim da se zove BackupRestoreUser tako da je ostao samo Backup
+        pwd: "123", // 
+        roles: [ { role: "backup", db: "admin" } ,
+                { role: "restore", db: "admin" } ]
+        }
+        )
+
+6. Na bash liniji u kontenjeru za backup kucamo:
+
+        mongodump --host=mongors2:27017 --username=BackupUser --password=123  --authenticationDatabase admin -readPreference=secondary --oplog --gzip --archive=/var/backups
+
+7. I imamo dump svih baza
+
+### Vjezba4: RESTORE S MONGORESTORE [link](https://www.mongodb.com/docs/manual/tutorial/restore-replica-set-from-backup/)
+
+1. Prvo spustimo sva tri noda posto cemo raditi "novi replica set"       // ovo necemo raditi kada je produkcijsko okruzenje vec dizemo sasvim novi replica set
+2. Pobrisemo svu datu iz sva tri noda
+3. Dignemo jedan node i na njemu uradimo inicijalizciju i dodavanje usera
+
+        rs.initiate(
+        {
+        _id: "rs0",
+        members: [
+                { _id: 0, host : "mongors1:27017" } ] } )
+
+        use admin
+        db.createUser(
+        {
+        user: "BackupUser",                                      
+        pwd: "123", // 
+        roles: [ { role: "backup", db: "admin" } ,
+                { role: "restore", db: "admin" } ]
+        }
+        )         
+
+4. Iz kontenjera 'mongobackup' na bash liniji kucamo:
+
+        mongorestore --archive=/var/backups/mongodump-2025-05-26.archive --gzip --host=mongors1:27017 -u BackupUser -p 123 --authenticationDatabase=admin 
+5. Provjerimo jesu li podaci tu na prvom nodu al prvo se logiramo sa nasim userom.
+
+        show dbs
+
+6. Ako jesu dizemo i druga dva noda pomocu docker-compose
+7. I dodajemo ih u replika set
+
+        rs.add('mongors2:27017')
+        rs.add('mongors3:27017')
+
+### Vjezba5: RESTORE PITR [link](https://stackoverflow.com/questions/15444920/modify-and-replay-mongodb-oplog/15451297#15451297):
+
+1. Scenario: U bazi smo napravili danas neku novu kolekciju i jos nesto radili, i sad slucajno pobrisemo neku staru kolekciju jer je bila slicnog imena.
+2. Moramo imati backup s oplogom i on mora sadrzavati zajednicku tocku s novim oplogom, znaci scoop oploga mora uhvatiti i backupov
+3. Uradimo dump oploga iz backup kontenjera:
+
+        mongodump --host=mongors2:27017 --username=BackupUser --password=123   --authenticationDatabase admin -d local -c oplog.rs -o oplogD
+
+4. Premjestimo oplog u novi direktorij
+
+        mv oplogD/local/oplog.rs.bson oplogR/oplog.bson
+
+5. Sada mozemo procitati oplog file pomocu bsondump ili naci u bazi ako je jos imamo timestamp kada je dropana kolekcija
+6. Posto u mene jos je ziva mongo instanca provjeravam pomocu
+
+        db.oplog.rs.find({
+        "op": "c",
+        "o.drop": { "$exists": true } // Provjerava da li postoji polje 'drop' unutar 'o' objekta
+        }).sort({
+        "ts": -1 // Sortiraj po timestampu (najnoviji prvi)
+        })
+
+7. Nalazim timestamp 1749562420, i: 1 
+8. Sada opet radimo zadnji restore backupa koji imamo i sav proces
+9. Onda radimo restore iz oploga:
+
+        mongorestore --host=mongors1:27017 -u BackupUser -p 123 --authenticationDatabase=admin --oplogReplay --oplogLimit 1749562420:1 oplogR
+
+10. Trebali bi sada imati vracenu kolekciju
+
+### Vjezba6: BACKUP SA SKRIPTOM
+
+1. Pravimo svoju [Dockerfile](./images/mongodockerfile.png) sliku 
+2. U [docker-compose.yaml](./images/mongobackupskripta.png) pravimo novi servis sa svojom Docker slikom
+3. Pravimo [skriptu](./images/mongodoskripta.png) za backup
+4. Sada bi se trebao backup praviti jednom dnevno u 02:00h
+
+### Dodatni materijali
+
+Tinova [skripta](./images/function%20getRandomInt.txt) za unos vise podataka odjednom 
