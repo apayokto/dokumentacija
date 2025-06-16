@@ -32,7 +32,7 @@ Rick RoTs [Rules of Thumb](https://mysql.rjweb.org/doc.php/ricksrots) ilitiga na
 ![Kako radi replikacija Master Slave](./images/1_Qei-oIdsrTspUAcu8QoUIA.png)
 
 1. Pravimo [Docker Compose YAML](./images/MasterSlaveyaml.pngMasterSlaveyaml.png)  file(tu sam skontao da je dobra praksa da ime servisa i kontenjera bude isto)
-2. Pravimo konfiguracijske fileove [master.conf](./images/masterconf.png) [slave.conf](./images/slaveconf.png)
+2. Pravimo konfiguracijske fileove [master.conf](./images/master2.png) [slave.conf](./images/slave2.png)
 3. Pokrenemo pomocu docker-composea oba kontenjera
 4. Udjemo u master kontenjer i u mysql te kreiramo usera za replikaciju:
 
@@ -97,7 +97,9 @@ Offical [self managed path](https://learn.mongodb.com/learn/learning-path/mongod
 Unoffical [path](https://www.youtube.com/watch?v=cLsawKBUdTE&list=PLSmSa8KVdfSu-XFvjdWoN7z9WRoLly4my)
 
 
-### Vjezba0: REPLICA SET S 3 MONGODB NODA 
+
+
+### Vjezba0: REPLICA SET S 3 MONGODB NODA [link](https://www.mongodb.com/docs/manual/replication/)
 
 1. Prvo pisemo [docker-compose.yaml](./images/mongo.png) file
 2. Pravimo foldere za conf fileove koje cemo mountati kroz yaml i dodajemo u njih sta nam treba  -->  [mongo1.cnf](./images/mongoconf.png) mongo2.cnf mongo3.cnf (2 i 3 su isto kao 1)
@@ -137,7 +139,7 @@ Unoffical [path](https://www.youtube.com/watch?v=cLsawKBUdTE&list=PLSmSa8KVdfSu-
 12. Ako je sve uredu mozemo odraditi mini vjezbu manualnog mijenjaja primarya,na primarnom nodu upisemo:
 
         cfg = rs.conf()   // Trenutna konfiguracija replica seta
-        cfg.members[2].priority = 2  //stavimo mu veci prioriti tako znamo da ce on biti izabran
+        cfg.members[2].priority = 2  //stavimo mu veci prioritet tako znamo da ce on biti izabran
         rs.reconfig(cfg)  // primjenjuje novu konfiguraciju
         rs.stepDown(60)  // automatski mu je 60 sekundi ali stavimo svakako
 
@@ -240,7 +242,7 @@ Hidden nam sluzi da radimo backupe ili analitiku preko njega da ne bi optereciva
 ### Vjezba5: RESTORE PITR [link](https://stackoverflow.com/questions/15444920/modify-and-replay-mongodb-oplog/15451297#15451297):
 
 1. Scenario: U bazi smo napravili danas neku novu kolekciju i jos nesto radili, i sad slucajno pobrisemo neku staru kolekciju jer je bila slicnog imena.
-2. Moramo imati backup s oplogom i on mora sadrzavati zajednicku tocku s novim oplogom, znaci scoop oploga mora uhvatiti i backupov
+2. Moramo imati backup s oplogom i on mora sadrzavati zajednicku tocku s novim oplogom, znaci scoop oploga mora uhvatiti i backupov.
 3. Uradimo dump oploga iz backup kontenjera:
 
         mongodump --host=mongors2:27017 --username=BackupUser --password=123   --authenticationDatabase admin -d local -c oplog.rs -o oplogD
@@ -308,8 +310,63 @@ Hidden nam sluzi da radimo backupe ili analitiku preko njega da ne bi optereciva
         db.adminCommand( { setFeatureCompatibilityVersion: "7.0" } )
 
 
+## INDEXI [link](https://www.mongodb.com/docs/manual/indexes/)
+
+        db.kolekcija.getIndexes()  # da vidimo indexe koje ima kolekcija
+
+Defaultno imamo index na polju _id.
+
+Single field index:
+
+        db.test.createIndex ({ age: 1 }) 
+        # ako je 1 asc a ako je -1 onda je kreiran kao descending
+        age_1 # index dobije unique ime ako mu mi to ne definiramo
+
+Mozemo koristiti komandu explain('executionStats' za detaljniji uvid) da vidimo da li query koristi index scan ili collection scan
+
+        db.test.find({ age: { $gt: 30 } }).explain()
+
+
+
+Compound index: 
+
+        db.test.createIndex ({name: 1, age: 1})
+
+Compound index moze biti puno efektivniji od single field indexa, jos ne moramo imati vise indexa nego samo jedan. Redoslijed s ljeva na desno je vazan da bi index bio efektivniji i pokrio query.A definiramo ga pomocu ESR (Equality, Sort, Range).
+
+MultiKey index:
+
+Indexi koji se kreiraju na polju koje ima niz.
+
+Hashed index:
+
+Pomazu nam pri shardiranju podataka na vise servera.
+
+
+Postoje jos text indexi , geospatial... 
+
+Opcije koje mozemo primijeniti na postojece indexe "unique", "sparse", "TTL"...
+
+## SLOW QUERIES
+
+        db.getProfilingStatus()
+
+0 - ne hvata nikakvu datu
+
+1 - hvata samo operacije koje prelaze slowms: 100 (stavljeno po defaultu)
+
+2 - hvata sve operacije (nije preporucljivo, defaultna velicina 1MB)
+
+        db.setProfilingLevel(1)
+
+Stvara se nova kolekcija system.profile i na njoj mozemo izvrsavati upite.
+
+        db.system.profile.find()
+
 
 
 ### Dodatni materijali
 
 Tinova [skripta](./images/function%20getRandomInt.txt) za unos vise podataka odjednom 
+
+Mongo [Cheat Sheet](https://www.mongodb.com/developer/products/mongodb/cheat-sheet/)
