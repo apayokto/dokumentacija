@@ -363,9 +363,27 @@ Stvara se nova kolekcija system.profile i na njoj mozemo izvrsavati upite.
 
         db.system.profile.find()
 
+## LOGOVI
 
+Za citanje logova [slika](./images/log.png)
 
-### Dodatni materijali
+Za lakse citanje logova mozemo koristiti alat jq
+
+        sudo cat mongod.log | jq
+
+### Vjezba0 Logrotate
+
+1. U config file sva 3 noda dodajemo: 'logRotate: reopen'
+
+2. U /etc/logrotate.d/ napravimo [skriptu](./images/logrotate.png)(nazovemo je mongodb) za rotiranje logova
+
+3. Pomocu komande mozemo forsirati izvodjenje skripte da testiramo
+
+        sudo logrotate -f /etc/logrotate.d/mongodb
+
+4. Sad ovo uradimo i sa ostala 2 noda
+
+## Dodatni materijali
 
 Tinova [skripta](./images/function%20getRandomInt.txt) za unos vise podataka odjednom 
 
