@@ -92,7 +92,7 @@ Rick RoTs [Rules of Thumb](https://mysql.rjweb.org/doc.php/ricksrots) ilitiga na
 # PERCONA XTRADB
 
 
-### Vjezba01: Percona Cluster s 3 noda [link](https://docs.percona.com/percona-server/8.0/quickstart-docker-compose.html#insert-operations)
+### Vjezba00: Percona Cluster s 3 noda [link](https://docs.percona.com/percona-server/8.0/quickstart-docker-compose.html#insert-operations)
 
 1. Prvo pravimo [docker-compose.yaml](./images/perconayaml1.png) file u folderu DockerPercona, pravimo isto i za node2 i node3
 
