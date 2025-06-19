@@ -1,4 +1,5 @@
 [PERCONA Vjezba01: Dodavanje asinkronog noda](#vjezba01-dodavanje-asinkronog-noda)
+[PERCONA Vjezba02: Testiranje baze pomocu sysbencha](#vjezba02-testiranje-baze-pomocu-sysbencha)
 
 # LINUX
 
@@ -163,6 +164,37 @@ GRESKA: Pri restoru backupa zbog putanje bin logova, xtrabackup ih je restorao u
 
 11.             Slave_IO_Running: Yes
                 Slave_SQL_Running: Yes
+
+### Vjezba02: Testiranje baze pomocu sysbencha [link](https://www.liberoscarcelli.com/blog/benchmarking-mysql-databases-with-sysbench)
+
+1. U [docker-compose.yaml](./images/toolsyaml.png) dodajemo debian kontenjer i odmah mu dajemo komandu da instalira sysbench (mogao sam i napraviti docker sliku sa sysbenchom al docemo i do toga).
+
+2. Konektiramo se na jedan node i napravimo usera preko kojega ce sysbench slati podatke.
+
+                CREATE USER 'sbtest'@'%' IDENTIFIED BY 'mbhND5CPm5yIIv';
+                CREATE SCHEMA sbtest;
+                GRANT ALL ON sbtest.* TO 'sbtest'@'%';
+
+3. Onda ulazimo u tools kontenjer i dajemo sysbenchu komandu da pripremi sve u bazi 
+
+        sysbench /usr/share/sysbench/oltp_read_write.lua --mysql-host=node1 --mysql-port=3306 --mysql-user=sbtest --mysql-password=mbhND5CPm5yIIv --mysql-db=sbtest --table_size=100000 --tables=10 --threads=10 prepare
+
+4. Pomocu upita na bazi noda1 mozemo vidjeti koliko je podataka upisano u koju tablicu.
+
+        SELECT     table_name,     table_rows 
+        FROM     information_schema.tables 
+        WHERE     table_schema = sbtest;
+
+Meni je bilo zanimljivo da ne prodju svi podaci a log pokazuje da ne prodju zbog MDL (metadata locks). A sta je to nauciti ces kad procitas knjigu sto je linkana na pocetku.
+
+5. [Ovdje](https://manpages.debian.org/testing/sysbench/sysbench.1.en.html) mozes vidjeti sve opcije za sysbench a mi koristimo:
+
+        sysbench /usr/share/sysbench/oltp_read_write.lua --mysql-host=node1 --mysql-port=3306 --mysql-user=sbtest --mysql-password=mbhND5CPm5yIIv --mysql-db=sbtest --table_size=100000 --tables=10 --threads=10 --report-interval=2 --time=60 --histogram=on run 
+
+6. Onda mozemo poceti istrazivati.
+
+
+
 
 
 
