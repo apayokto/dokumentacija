@@ -1,3 +1,5 @@
+[PERCONA Vjezba01: Dodavanje asinkronog noda](#vjezba01-dodavanje-asinkronog-noda)
+
 # LINUX
 
 Dobar pocetak ako si [extrovert](https://www.youtube.com/watch?v=VbEx7B_PTOE&list=PLIhvC56v63IJIujb5cyE13oLuyORZpdkL)
@@ -87,8 +89,85 @@ Rick RoTs [Rules of Thumb](https://mysql.rjweb.org/doc.php/ricksrots) ilitiga na
 
         STOP REPLICA;
 
+# PERCONA XTRADB
 
-# MONGODB
+
+### Vjezba01: Percona Cluster s 3 noda [link](https://docs.percona.com/percona-server/8.0/quickstart-docker-compose.html#insert-operations)
+
+1. Prvo pravimo [docker-compose.yaml](./images/perconayaml1.png) file u folderu DockerPercona, pravimo isto i za node2 i node3
+
+2. Pravimo folder za .cnf fileove i tamo pravimo [node1.cnf](./images/perconacnf1.png). Za druge dvije conf samo mijenjamo da je to node2 ili 3 i cluster adresu upisivamo sva tri noda. (innodb_io_capacity sam istrazivao i nisam  bio siguran da li ga staviti u cnf file, pa cemo se jos konzultovati)
+
+3. Za svaki node pravimo foldere za datu i dajemo im permisije da ih instanca iz kontenjera moze koristiti, isto pravimo foldere i za logove.
+
+4. Pokrenemo docker compose jedan po jedan node i vidimo da sve radi.
+
+
+### Vjezba01: Dodavanje asinkronog noda 
+
+1. U [docker-compose.yaml](./images/perconaarep.png) dodajemo servis za asinkronog 
+
+2. Pravimo i njemu config file gdje mozemo izbaciti wsrep opcije a treba svima dodati gtid_mode=ON, enforce_gtid_consistency=ON da bi asinkrona replikacija mogla raditi pa to izgleda ovako [areplica.cnf](/images/perconaarepconf.png)
+
+GRESKA: Pri restoru backupa zbog putanje bin logova, xtrabackup ih je restorao u folder s logovima a vamo su po defaultu bili u mysql folderu pa ih asinkrona replica nije citala, znaci samo pobrisite putanju za bin logove.
+
+3. Slave node mora dobiti pocetnu kopiju podataka od pxc master noda.Tako da radimo backup na jednom nodu i restoramo na areplici
+
+4. Na node3 radimo backup i prepare: 
+
+        /usr/bin/pxc_extra/pxb-8.0/bin/xtrabackup --backup --target-dir=/tmp/new_replication_backup --slave-info -u root --password 
+
+        /usr/bin/pxc_extra/pxb-8.0/bin/xtrabackup --prepare --target-dir=/tmp/new_replication_backup
+
+5. Kopiramo ga na hosta u folder backups:
+
+        sudo docker cp node3:/tmp/new_replication_backup ~/DockerPercona/backups/
+
+6. Dajemo backupu permisije i vlasnistva:
+
+        sudo chown -R 1001:1001 new_replication_backup/
+
+
+7. Prebacivamo taj prepared backup na kontenjer gdje areplica:
+
+
+       sudo docker cp ~/DockerPercona/backups/new_replication_backup areplica:/tmp/
+
+8. Uradimo restore na areplici al prvo pobrisemo podatke iz date i logova:
+
+        rm -rf areplica_data/*
+        rm -rf logar/*
+        
+
+        /usr/bin/pxc_extra/pxb-8.0/bin/xtrabackup --copy-back --target-dir=/tmp/new_replication_backup
+
+
+
+9. Odaberemo jedan node koji ce biti master u ovoj replici(to bude node koji ima najmanje posla) i na njemu pravimo usera za asinkronu replicu
+
+        CREATE USER 'replica2'@'%' IDENTIFIED BY 'NovaLozinkaZaRepliku';
+
+        GRANT REPLICATION SLAVE ON *.* TO 'replica2'@'%';
+
+        FLUSH PRIVILEGES;
+
+10. Na areplici kucamo:
+
+        CHANGE REPLICATION SOURCE TO
+        MASTER_HOST='node3',
+        MASTER_USER='replica2',
+        MASTER_PASSWORD='NovaLozinkaZaRepliku',
+        MASTER_PORT=3306,
+        MASTER_AUTO_POSITION=1,
+        SOURCE_DELAY=60;
+
+11.             Slave_IO_Running: Yes
+                Slave_SQL_Running: Yes
+
+
+
+
+## MONGODB
 
 Uvijek [sluzbena dokumentacija](https://www.mongodb.com/docs/)
 
@@ -371,7 +450,7 @@ Za lakse citanje logova mozemo koristiti alat jq
 
         sudo cat mongod.log | jq
 
-### Vjezba0 Logrotate
+### Vjezba0 Logrotate [link1](https://betterstack.com/community/guides/logging/database/how-to-start-logging-with-mongodb/) [link2](https://betterstack.com/community/guides/logging/how-to-manage-log-files-with-logrotate-on-ubuntu-20-04/#changing-the-system-logrotate-schedule)
 
 1. U config file sva 3 noda dodajemo: 'logRotate: reopen'
 
