@@ -1,4 +1,5 @@
 [PERCONA Vjezba01: Dodavanje asinkronog noda](#vjezba01-dodavanje-asinkronog-noda)
+
 [PERCONA Vjezba02: Testiranje baze pomocu sysbencha](#vjezba02-testiranje-baze-pomocu-sysbencha)
 
 # LINUX
@@ -99,6 +100,8 @@ Rick RoTs [Rules of Thumb](https://mysql.rjweb.org/doc.php/ricksrots) ilitiga na
 
 2. Pravimo folder za .cnf fileove i tamo pravimo [node1.cnf](./images/perconacnf1.png). Za druge dvije conf samo mijenjamo da je to node2 ili 3 i cluster adresu upisivamo sva tri noda. (innodb_io_capacity sam istrazivao i nisam  bio siguran da li ga staviti u cnf file, pa cemo se jos konzultovati)
 
+*update(sa binlog formatom row, u binlog pise promjene po redcima a ne po izjavama i zato autoinc lock mode 2 odgovara perfomansama jer ne zakljucava te redke i on ih brze moze pisati)
+
 3. Za svaki node pravimo foldere za datu i dajemo im permisije da ih instanca iz kontenjera moze koristiti, isto pravimo foldere i za logove.
 
 4. Pokrenemo docker compose jedan po jedan node i vidimo da sve radi.
@@ -165,7 +168,8 @@ GRESKA: Pri restoru backupa zbog putanje bin logova, xtrabackup ih je restorao u
 11.             Slave_IO_Running: Yes
                 Slave_SQL_Running: Yes
 
-### Vjezba02: Testiranje baze pomocu sysbencha [link](https://www.liberoscarcelli.com/blog/benchmarking-mysql-databases-with-sysbench)
+### Vjezba02: Testiranje baze pomocu sysbencha 
+[link](https://www.liberoscarcelli.com/blog/benchmarking-mysql-databases-with-sysbench)
 
 1. U [docker-compose.yaml](./images/toolsyaml.png) dodajemo debian kontenjer i odmah mu dajemo komandu da instalira sysbench (mogao sam i napraviti docker sliku sa sysbenchom al docemo i do toga).
 
@@ -191,11 +195,39 @@ Meni je bilo zanimljivo da ne prodju svi podaci a log pokazuje da ne prodju zbog
 
         sysbench /usr/share/sysbench/oltp_read_write.lua --mysql-host=node1 --mysql-port=3306 --mysql-user=sbtest --mysql-password=mbhND5CPm5yIIv --mysql-db=sbtest --table_size=100000 --tables=10 --threads=10 --report-interval=2 --time=60 --histogram=on run 
 
-6. Onda mozemo poceti istrazivati.
+6. Onda mozemo poceti istrazivati galera cluster.
+
+### Galera cluster [link](https://www.youtube.com/watch?v=P523ftzjijk)
+
+Failure:
+- SINGLE NODE FAILURE
+- TOTAL CLUSTER CRASH
+
+Monitoring:
+
+-Clustera: wsrep_cluster_state_uuid, wsrep_cluster_size, wsrep_cluster_conf_id, wsrep_cluster_status
+
+-Noda: wsrep_ready, wsrep_connected, wsrep_local_state_comment
+
+-Replikacije: wsrep_local_rcv_queue_avg, wsrep_flow_control_paused,wsrep_cert_deps_distance
 
 
+## MARIADB
 
+### Vjezba00: Dignuti Mariadb cluster s 3 noda
 
+1. Pravimo [docker-compose.yaml](./images/mariayaml.png), i ovako napravimo za jos dva noda
+
+2. Pravimo im foldere za datu i logove i dajemo permisije da mogu pisati u njih
+
+3. Pravimo folder config i u njemu za svaki node njegov conf file [maria1.cnf](./images/mariaconfig.png), tako i za 2 i 3.
+
+4. Sada pokrenemo node jedan po jedan ali ne radi jer smo zaboravili u docker compose staviti
+
+                command: --wsrep-new-cluster
+da mozemo bootstrapati neki node.
+
+### Vjezba01: Dodati maxscale ispred clustera
 
 
 
