@@ -228,6 +228,124 @@ Monitoring:
 da mozemo bootstrapati neki node.
 
 ### Vjezba01: Dodati maxscale ispred clustera
+[link](https://mariadb.com/docs/maxscale/mariadb-maxscale-tutorials/mariadb-maxscale-2501-maxscale-2501-setting-up-mariadb-maxscale) 
+
+1. U [docker-compose.yaml](./images/maxscaleyaml.png) dodajemo servis maxscale
+
+2. U config folderu pravimo [maxscale.cnf](./images/maxscalecnf.png) file za maxscale, tu postavljamo dosta postavki [link](https://github.com/mariadb-corporation/MaxScale/blob/24.02/Documentation/Getting-Started/Configuration-Guide.md#configuration) [link](https://www.youtube.com/watch?v=hJd_diI7lBo)
+
+3. Na svakome nodu napravimo maxscale usera kojeg cemo koristiti i za monitoring i za servise (znaci nismo koristili pravilo least privileges):
+
+        CREATE USER 'maxscale'@'%' IDENTIFIED BY 'ass';
+        GRANT SELECT ON mysql.user TO 'maxscale'@'%';
+        GRANT SELECT ON mysql.db TO 'maxscale'@'%';
+        GRANT SELECT ON mysql.tables_priv TO 'maxscale'@'%';
+        GRANT SELECT ON mysql.columns_priv TO 'maxscale'@'%';
+        GRANT SELECT ON mysql.procs_priv TO 'maxscale'@'%';
+        GRANT SELECT ON mysql.proxies_priv TO 'maxscale'@'%';
+        GRANT SELECT ON mysql.roles_mapping TO 'maxscale'@'%';
+        GRANT SHOW DATABASES ON *.* TO 'maxscale'@'%';
+        GRANT RELOAD ON *.* TO 'maxscale'@'%';
+        GRANT PROCESS ON *.* TO 'maxscale'@'%';
+        GRANT SLAVE MONITOR ON *.* TO 'maxscale'@'%';
+        GRANT REPLICATION CLIENT ON *.* TO 'maxscale'@'%';
+        GRANT REPLICATION SLAVE ON *.* TO 'maxscale'@'%';
+        FLUSH PRIVILEGES;
+
+
+4. Pokrenemo maxscale kontenjer  i sada se na baze mozemo spajati preko njega, ja sam to uradio kroz jos jedan kontenjer i [sysbench](#vjezba02-testiranje-baze-pomocu-sysbencha).
+
+        sysbench /usr/share/sysbench/oltp_read_write.lua --mysql-host=maxscale --mysql-port=3306 --mysql-user=sbtest --mysql-password=ass --mysql-db=sbtest --table_size=100000 --tables=20 --threads=10 --report-interval=2 --time=60 --histogram=on prepare
+
+a za citanje ide port 4010.
+
+
+
+### Vjezba02: Full Fizicki backup s mariabackupom i restore
+
+1. Pravimo u [dcoker-compose.yaml](./images/mariabackupyaml.png) kontenjer za backup gdje mu mountamo volume s hosta kojemu cemo raditi backup i takodjer mountamo folder gdje ce se cuvati backupi.
+
+2. Napravimo usera za backup:
+
+        CREATE USER 'mariabackup'@'%'
+        IDENTIFIED BY 'mbu_passwd';
+
+        GRANT RELOAD, PROCESS, LOCK TABLES, REPLICATION CLIENT
+        ON *.* TO 'mariabackup'@'%';
+
+
+3. Pokrenemo kontenjer za backup i kucamo(uvijek se radi u prazan folder):
+
+        mariadb-backup --backup --host=maria2 --port=3306 --target-dir=/var/backups/novi --user=mariabackup --password=mbu_passwd
+
+4. Spustamo sva 3 noda i brisemo im datu iz njihovih volumena.
+
+5. U backup kontenjeru radimo prepare:
+
+        mariadb-backup --prepare --target-dir=/var/backups/novi 
+
+6. Pa radimo restore ilitiga copy back:
+
+        mariadb-backup --copy-back --target-dir=/var/backups/novi
+
+7. Sada boostrapamo  node2 jer smo preko njega radili restore i spajamo druga dva koja prihvacaju njegov izvor istine.
+
+
+### Vjezba03: Incremental backup and restore
+
+1. Incremental backup ne mozemo raditi bez full backupa a imamo ga iz prijasnje vjezbe pa sad unesemo nesto novih podataka da imamo sta backupirati s incremental backupom.
+
+2. Incremental backup opet radimo iz backup kontenjera:
+
+        mariadb-backup --backup --target-dir=/var/backups/noviinc --incremental-basedir=/var/backups/novi --host=maria2 --port=3306 --user=mariabackup --password=mbu_passwd
+
+3. Sada opet spustamo sva 3 noda i brisemo im datu iz volumena.
+
+4. Onda radimo prepare backupa, prvo full pa incremental:
+
+        mariadb-backup --prepare --target-dir=/var/backups/novi 
+
+        mariadb-backup --prepare --target-dir=/var/backups/novi --incremental-dir=/var/backups/noviinc
+
+5. Pa radimo restore(ako je vise incremental backupa, prepare ih jedan po jedan na full i na kraju samo se restora iz fulla):
+
+        mariadb-backup --copy-back --target-dir=/var/backups/novi
+
+6. Dizemo node2 s novim izvorom istine i spajamo druga dva noda.
+
+### Vjezba04: PITR restore
+
+1. Unosili smo podatke u bazu i netko je slucajno pobrisao tablicu, a kasnije su se podaci nastavili unositi, pa cemo pomocu pitr i binlogova pokusati uraditi PITR te tablice.
+
+2. Imamo jedan full backup i incremental backup, pa cemo njih iskoristiti, prvo moramo sacuvati binlogove koji nam trebaju.
+
+3. Iz binloga izvlacimo sto nam treba, u segmentima jer samo zelimo izbjeci kada se desio drop tablice:
+
+        mariadb-binlog  --stop-position=5112 /var/lib/mysql/mysql-bin.000001 > /var/backups/binlog01.sql
+
+        mariadb-binlog  --start-position=5242 /var/lib/mysql/mysql-bin.000001 > /var/backups/binlog02.sql
+
+4. Sada radimo full i incremental backup koje imamo,dizemo nodove pa vracamo binlog:
+
+        mariadb -u root -p < /var/backups/binlog01.sql
+
+        mariadb -u root -p < /var/backups/binlog02.sql
+
+5. I sada bi tu trebala biti i slucajno dropana tablica.
+
+### Vjezba05: Pravljenje skripte za full i incremental backup
+
+1. Prvo treba razraditi taktiku za backupa (RPO i RTO). Mi smo odlucili backup raditi svaki dan jednom u ponoc a incremental backup svaki sat.
+
+2. 
+
+
+
+
+
+
+
+
 
 
 
