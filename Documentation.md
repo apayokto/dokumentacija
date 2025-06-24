@@ -333,12 +333,31 @@ a za citanje ide port 4010.
 
 5. I sada bi tu trebala biti i slucajno dropana tablica.
 
-### Vjezba05: Pravljenje skripte za full i incremental backup
+### Vjezba05: Pravljenje skripte za full backup
 
-1. Prvo treba razraditi taktiku za backupa (RPO i RTO). Mi smo odlucili backup raditi svaki dan jednom u ponoc a incremental backup svaki sat.
+1. Prvo treba razraditi taktiku za backupa (RPO i RTO). Mi smo odlucili full backup raditi svaki dan jednom u ponoc a incremental backup svaki sat.
 
-2. 
+2. Pravimo skriptu za full backup, u novom folderu kojega cemo nazvati cronbackup, skriptu nazivamo fullscript.sh
 
+3. U prvom dijelu [skritpe](./images/skriptafull.png) definiramo varijable , stavljamo set -Eeuo a to su pravila za prekidanja skripte ako trap uhvati signale koje smo definirali u nastavku. I kazemo mu da kreira direktorij za logove i pomocu dirname izvuce ime loga iz putanje, i direktorij za backup ako ne postoje.
+
+4. Prva polovina drugog dijela [skrite](./images/skriptafull2.png) odnosi se na definiranje backup_succes=0, tu je mala greska jel u unixu 0 znaci succes a u nasem slucaju neuspjeh. Tu definiramo i cleanup funkciju i sta ona radi u slucaju da trap povuce neki od signala INT TERM ERR sto znaci da se cleanup aktivira i brise ostatke fileova iza backupa i sve to appenda(-a) u log($LOG_FILE) i daje izlaz u terminal(tee).Zavrsavamo je sa exit 1, gdje je 1 razlicito od 0 sto znaci da skripta nije uspjela.
+
+5. U drugoj polovini drugog dijela [skripte](./images/skriptafull3.png) definiramo finish fuknciju, ona se aktivira kad trap uhvati EXIT signal.Prvi if kaze ako je backup_succes jednak 1 onda je backup uspjesno zavrsen,u njoj definiramo putanju za kompresirani file(TAR_PATH) i dajemo backupu unique ime pomocu SOURCE_FOLDER.U podfunkciji ako postoji SOURCE_FOLDER onda ga kompresiramo u TAR_PATH i stavljamo u BACKUP_DIR govoreci mu sa basename da uzme samo ime filea na kraju putanje i tako ga skladisti.U podpodfunkciji mu kazemo, ako je sve to dobro proslo(=0) onda reci Kompresija zavrsena u ostalim slucajevima da javi gresku. U podfunkciji ako nije nasao SOURCE_FOLDER da to javi.U glavnoj funkciji mu jos kazemo da brise kompresirane backup fajlove starije od 3 dana i da brise nekompresirane backup foldere starije od 1 dana.Ako sta u glavnoj funkciji nije uspjelo javi da backup nije uspjesan.Ako je sve dobro proslo javi da je finish funkcija zavrsena.
+
+6. U zadnjem dijelu [skripte](./images/skriptafull4.png) lovimo trap signale koji pokrecu cleanup i finish funkcije. Onda mu kazemo da nam javi da pokrece full backup.Prvo pravi parent direktorij gdje smo mu putanju definirali u varijablama.Onda postavljamo u uvjetu da radi backup i ako je uspjesan definiramo ga sa backup_succes=1 i javlja nam da je uspjesno zavrsen u else slucaju kazemo da je backup_succes=0 neuspjesan i izlazimo sa exit 1.
+
+7. Pravimo [cronjob](./images/skriptacronjob.png) koji ce izvrsavati se svaki dan tocno u ponoc. Izguglao sam da moram dati koji shell da koristi i putanju za komande jer mi bez toga cronjob nije radio.
+
+8. Pravimo [Dockerfile](./images/skriptadockerfile.png)
+
+9. Sve to stavimo u [docker-compose.yaml](./images/skriptayaml.png)
+
+10. Buildamo sliku i pokrenemo kontenjer. On ce automatski raditi fullbackup svaki dan u ponoc.A mozemo testirati pokrecuci skriptu van kontenjera:
+
+        docker exec mariacron /usr/local/bin/fullscript.sh
+
+### Vjezba06: MariaDB galera cluster + asinkroni node(GTID)+ maxscale
 
 
 
