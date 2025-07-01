@@ -187,7 +187,7 @@ GRESKA: Pri restoru backupa zbog putanje bin logova, xtrabackup ih je restorao u
 
         SELECT     table_name,     table_rows 
         FROM     information_schema.tables 
-        WHERE     table_schema = sbtest;
+        WHERE     table_schema = 'sbtest';
 
 Meni je bilo zanimljivo da ne prodju svi podaci a log pokazuje da ne prodju zbog MDL (metadata locks). A sta je to nauciti ces kad procitas knjigu sto je linkana na pocetku.
 
@@ -197,8 +197,13 @@ Meni je bilo zanimljivo da ne prodju svi podaci a log pokazuje da ne prodju zbog
 
 6. Onda mozemo poceti istrazivati galera cluster.
 
-### Galera cluster [link](https://www.youtube.com/watch?v=P523ftzjijk)
+### Galera cluster
 
+ [link](https://severalnines.com/resources/whitepapers/galera-cluster-mysql-tutorial/)
+
+[link](https://www.youtube.com/watch?v=P523ftzjijk)
+
+ 
 Failure:
 - SINGLE NODE FAILURE
 - TOTAL CLUSTER CRASH
@@ -255,7 +260,7 @@ da mozemo bootstrapati neki node.
 
 4. Pokrenemo maxscale kontenjer  i sada se na baze mozemo spajati preko njega, ja sam to uradio kroz jos jedan kontenjer i [sysbench](#vjezba02-testiranje-baze-pomocu-sysbencha).
 
-        sysbench /usr/share/sysbench/oltp_read_write.lua --mysql-host=maxscale --mysql-port=3306 --mysql-user=sbtest --mysql-password=ass --mysql-db=sbtest --table_size=100000 --tables=20 --threads=10 --report-interval=2 --time=60 --histogram=on prepare
+        sysbench /usr/share/sysbench/oltp_read_write.lua --mysql-host=maxscale --mysql-port=3306 --mysql-user=sbtest --mysql-password=ass --mysql-db=sbtest --table_size=100000 --tables=20 --threads=10 --report-interval=2 --time=60 --histogram=on prepare/run
 
 a za citanje ide port 4010.
 
@@ -357,7 +362,73 @@ a za citanje ide port 4010.
 
         docker exec mariacron /usr/local/bin/fullscript.sh
 
-### Vjezba06: MariaDB galera cluster + asinkroni node(GTID)+ maxscale
+
+### Vjezba06: Pravljenje skripte za incremental backup
+
+
+
+### Vjezba07: MariaDB galera cluster + asinkroni node(GTID)+ maxscale
+
+1. Pravimo novi folder i u njemu novi [docker-compose.yaml](./images/asmaxyaml.png) koji ce sadrzavati 3 mariadb servisa povezana u galera cluster i jedan asinkroni mariadb servis, te maxscale i jedan kontenjer za sysbench da mozemo 'gurati' podatke.
+
+2. Pravimo konfiguracijske fileove za [nodove](./images/asmaxcnf1.png
+) u galeri, [asinkronu](./images/asmaxacnf1.png) i [maxscale.cnf](./images/amaxcnf.png) 
+
+
+3. Dizemo prvo koji cemo boostrapati u nasem slucaju mariam2.Spojimo se na njega i napravimo maxscale usera, kojem dadnemo sve ove privilegije posto cemo preko njega raditi i monitoring i replikaciju...
+
+        CREATE USER 'maxscale'@'%' IDENTIFIED BY 'rNtOdlAg30SkaF';
+        GRANT SELECT ON mysql.user TO 'maxscale'@'%';
+        GRANT SELECT ON mysql.db TO 'maxscale'@'%';
+        GRANT SELECT ON mysql.tables_priv TO 'maxscale'@'%';
+        GRANT SELECT ON mysql.columns_priv TO 'maxscale'@'%';
+        GRANT SELECT ON mysql.procs_priv TO 'maxscale'@'%';
+        GRANT SELECT ON mysql.proxies_priv TO 'maxscale'@'%';
+        GRANT SELECT ON mysql.roles_mapping TO 'maxscale'@'%';
+        GRANT SHOW DATABASES ON *.* TO 'maxscale'@'%';
+        GRANT RELOAD ON *.* TO 'maxscale'@'%';
+        GRANT PROCESS ON *.* TO 'maxscale'@'%';
+        GRANT SLAVE MONITOR ON *.* TO 'maxscale'@'%';
+        GRANT REPLICATION CLIENT ON *.* TO 'maxscale'@'%';
+        GRANT REPLICATION SLAVE ON *.* TO 'maxscale'@'%';
+        FLUSH PRIVILEGES;
+
+4. Sada dizemo asinkronu repliku i njoj radimo obicnu master slave GTID replikaciju preko nodea koji ima sve binlogove(ne pitaj kako znam).
+
+5. Onda dizemo maxscale i vidimo da li sve radi za nas galera cluster.
+
+        maxctrl list servers
+
+6. Dizemo i asinkronu repliku i onda joj kazemo da je asinkrona:
+
+        CHANGE MASTER TO 
+         MASTER_HOST="mariam2", 
+        MASTER_PORT=3306,
+        MASTER_USER="repl",
+        MASTER_PASSWORD="madmax",
+        MASTER_USE_GTID=slave_pos,
+        MASTER_SSL=0;
+
+7. Sada je spojimo da ide preko maxscalea i RO listenera:
+
+        CHANGE MASTER TO 
+        MASTER_HOST='maxscale', 
+        MASTER_PORT=4010, 
+        MASTER_USER='maxscale', 
+        MASTER_PASSWORD='rNtOdlAg30SkaF',
+        MASTER_USE_GTID=slave_pos,
+        MASTER_SSL=0;
+
+8. Dignemo kontenjer sa sysbenchom i testiramo da li sve radi:
+
+        sysbench /usr/share/sysbench/oltp_read_write.lua --mysql-host=maxscale --mysql-port=4306 --mysql-user=sbtest2 --mysql-password=mbhND5CPm5yIIv --mysql-db=sbtest2 --table_size=100000 --tables=10 --threads=10 --report-interval=2 --time=60 --histogram=on run     
+
+9.  Spojimo se na maxscale i kazemo mu
+
+        maxctrl list servers
+![Maxscale slika](./images/amaxctrl.png)    
+
+
 
 
 
