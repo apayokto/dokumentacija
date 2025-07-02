@@ -199,6 +199,8 @@ Meni je bilo zanimljivo da ne prodju svi podaci a log pokazuje da ne prodju zbog
 
 ### Galera cluster
 
+[Documentation](https://galeracluster.com/library/documentation/index.html)
+
  [link](https://severalnines.com/resources/whitepapers/galera-cluster-mysql-tutorial/)
 
 [link](https://www.youtube.com/watch?v=P523ftzjijk)
@@ -393,7 +395,7 @@ a za citanje ide port 4010.
         GRANT REPLICATION SLAVE ON *.* TO 'maxscale'@'%';
         FLUSH PRIVILEGES;
 
-4. Sada dizemo asinkronu repliku i njoj radimo obicnu master slave GTID replikaciju preko nodea koji ima sve binlogove(ne pitaj kako znam).
+4. Sada dizemo asinkronu repliku,prebacivamo joj restore koji smo uradili na jednom od nodova s mariabackupom i njoj radimo obicnu master slave GTID replikaciju preko nodea koji ima sve binlogove(ne pitaj kako znam).
 
 5. Onda dizemo maxscale i vidimo da li sve radi za nas galera cluster.
 
@@ -402,7 +404,7 @@ a za citanje ide port 4010.
 6. Dizemo i asinkronu repliku i onda joj kazemo da je asinkrona:
 
         CHANGE MASTER TO 
-         MASTER_HOST="mariam2", 
+        MASTER_HOST="mariam2", 
         MASTER_PORT=3306,
         MASTER_USER="repl",
         MASTER_PASSWORD="madmax",
@@ -429,9 +431,59 @@ a za citanje ide port 4010.
 ![Maxscale slika](./images/amaxctrl.png)    
 
 
+### Vjezba08: Dodavanje TLS certifikata na Vjezbu07
+
+[link](https://mariadb.com/resources/blog/securing-mariadb-server-mariadb-maxscale-connections-tls/)
+
+1. Kreiramo direktorij gdje cemo cuvati certifikate
+
+        mkdir certs
+
+2. Udjemo u taj direktorij i kreiramo certifikate:
+
+        openssl genrsa 2048 > ca-key.pem
+
+        openssl req -new -x509 -nodes -days 3650 -key ca-key.pem -out ca.pem -subj "/CN=MyMariaDBClusterCA/O=MyOrg/C=BA"
 
 
+        openssl req -newkey rsa:2048 -days 3650 -nodes -keyout server-key.pem -out server-req.pem -subj "/CN=server.mycluster.local/O=MyOrg/C=BA"
 
+        openssl x509 -req -in server-req.pem -days 3650 -CA ca.pem -CAkey ca-key.pem -set_serial 01 -out server-cert.pem
+
+        openssl req -newkey rsa:2048 -days 3650 -nodes -keyout client-key.pem -out client-req.pem -subj "/CN=client.mycluster.local/O=MyOrg/C=BA"
+
+
+        openssl x509 -req -in client-req.pem -days 3650 -CA ca.pem -CAkey ca-key.pem -set_serial 02 -out client-cert.pem
+
+        rm *-req.pem  
+        
+3.  ![slika cert](./images/certdir.png)
+
+    Dobijemo ovih 6 fileova, od kojih ca key je kljuc kojim pravimo ca.pem koji nam sluzi za pecacenje ostalih certifikata, kao npr serverskih i klijentskih.
+
+4. Zbog jednostavnosti vjezbe kopirali smo ih u jos jedan folder i jednome smo folderu dali permisije od mariadb a drugom od maxscalea.
+
+5. Onda smo ih [mountali](./images/certyaml2.png) u kontenjere s opcijom read only, maria u maria , max u max. 
+
+6. Prvo smo ih ubacili u nodove od [galera clustera](./images/certyaml.png) da se enkriptira promet izmedju replika. Galerin interni SSL nam kaze da mozemo staviti server certifikate da ne treba client.
+
+7. Onda serverske certifikate stavljamo na svaki node a klijentske u cnf maxscale ispod svakog definiranog servera. Da pokrijemo komunikaciju izmedju maxscalea i naseg galera clustera.
+
+8. Iduci korak je da serverske certifikate stavljamo na maxscale listenere da pokrijemo veze koje se spajaju na njih. Npr. kao veza asinkrone replikacije i maxscalea koju onda moramo uspostaviti sa:
+
+        CHANGE MASTER TO 
+        MASTER_HOST='maxscale', 
+        MASTER_PORT=4010, 
+        MASTER_USER='maxscale', 
+        MASTER_PASSWORD='rNtOdlAg30SkaF',
+         MASTER_USE_GTID=slave_pos;
+        MASTER_SSL=1,
+        MASTER_SSL_CERT='/etc/mysql/certs/client-cert.pem',
+        MASTER_SSL_KEY='/etc/mysql/certs/client-key.pem',
+        MASTER_SSL_CA='/etc/mysql/certs/ca.pem',
+        MASTER_SSL_VERIFY_SERVER_CERT=0;
+
+Zadnja linija nam sluzi da iskljucimo verifikaciju prema serverima posto nismo ukljucili ime servera u CN pri pravljenju certifikata pa ga nece prepoznati.
 
 
 
